@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════
 
 // ── CONSTANTS ─────────────────────────────────────────
-const CELL        = 20;
+const CELL        = 24;
 const COLS        = 30;
 const ROWS        = 30;
 const CW          = COLS * CELL;   // 600
@@ -18,14 +18,14 @@ const OBS_SAFE    = 3;   // cell radius around burrows
 const OBSTACLE_RATIO = 0.08;
 
 // tile
-const T_EMPTY = 0, T_ROCK = 1, T_WATER = 2;
+const T_EMPTY = 0, T_ROCK = 1, T_WATER = 2, T_BURROW = 3;
 
 // ── CHARACTER DEFS ────────────────────────────────────
 const CHAR_DEFS = {
-  pika:  { name:'Pika',  startHp:200, maxHp:250, speed:6,  carry:2, color:'#c4945a', earColor:'#b07840', desc:'그냥 쥐토끼',          behavior:'balanced' },
-  rpika: { name:'Rpika', startHp:250, maxHp:300, speed:3,  carry:2, color:'#e8dfc8', earColor:'#d0c0a0', desc:'털이 복슬복슬한 쥐토끼', behavior:'defensive' },
-  pyka:  { name:'Pyka',  startHp:150, maxHp:250, speed:12, carry:2, color:'#6a6a8a', earColor:'#5a5a7a', desc:'매끈매끈한 쥐토끼',    behavior:'fast' },
-  hika:  { name:'Hika',  startHp:150, maxHp:250, speed:6,  carry:4, color:'#8a6040', earColor:'#7a5030', desc:'카우보이 쥐토끼',      behavior:'thief' },
+  pika:  { name:'Pika',  startHp:150, maxHp:200, speed:6,  carry:2, color:'#c4945a', earColor:'#b07840', desc:'그냥 쥐토끼',          behavior:'balanced' },
+  rpika: { name:'Rpika', startHp:200, maxHp:250, speed:3,  carry:2, color:'#e8dfc8', earColor:'#d0c0a0', desc:'털이 복슬복슬한 쥐토끼', behavior:'defensive' },
+  pyka:  { name:'Pyka',  startHp:100, maxHp:200, speed:9,  carry:2, color:'#6a6a8a', earColor:'#5a5a7a', desc:'매끈매끈한 쥐토끼',    behavior:'fast' },
+  hika:  { name:'Hika',  startHp:100, maxHp:200, speed:6,  carry:3, color:'#8a6040', earColor:'#7a5030', desc:'카우보이 쥐토끼',      behavior:'thief' },
 };
 
 const BURROW_CORNERS = [
@@ -97,6 +97,29 @@ function pdist(x1,y1,x2,y2) { return Math.sqrt((x1-x2)**2+(y1-y2)**2); }
 function shuffle(a) { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
 
 // ── MAP ───────────────────────────────────────────────
+// Returns true if (cx,cy) is adjacent (8-dir) to any obstacle
+function adjToObs(map, cx, cy) {
+  for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+    if (!dx&&!dy) continue;
+    const nx=cx+dx, ny=cy+dy;
+    if (nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
+    if (map[ny][nx]!==T_EMPTY && map[ny][nx]!==T_BURROW) return true;
+  }
+  return false;
+}
+// Returns true if placing at (cx,cy) keeps cluster-to-cluster distance >= 2
+function clusterSafe(map, cx, cy) {
+  // Check that no obstacle exists within chebyshev distance 2
+  // (except direct neighbours which form the same cluster)
+  for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++) {
+    if (Math.abs(dx)<=1&&Math.abs(dy)<=1) continue; // same cluster OK
+    const nx=cx+dx, ny=cy+dy;
+    if (nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
+    if (map[ny][nx]!==T_EMPTY && map[ny][nx]!==T_BURROW) return false;
+  }
+  return true;
+}
+
 function makeMap() {
   const map = Array.from({length:ROWS}, ()=>new Uint8Array(COLS));
   const n = Math.floor(COLS*ROWS*OBSTACLE_RATIO);
@@ -106,15 +129,38 @@ function makeMap() {
     const cx=ri(0,COLS-1), cy=ri(0,ROWS-1);
     if (map[cy][cx]!==T_EMPTY) continue;
     if (BURROW_CORNERS.some(b=>cdist(cx,cy,b.cx,b.cy)<=OBS_SAFE)) continue;
+    // Allow adjacent to existing obstacle (same cluster), but clusters must be 2 apart
+    if (!adjToObs(map,cx,cy) && !clusterSafe(map,cx,cy)) continue;
+    if (adjToObs(map,cx,cy)) {
+      // Extending existing cluster — just check no other cluster too close
+      if (!clusterSafe(map,cx,cy)) continue;
+    }
     map[cy][cx] = bern(0.5) ? T_ROCK : T_WATER;
     placed++;
   }
   return map;
 }
 
+// Mark burrow cells as T_BURROW (impassable), leave entrance walkable
+function markBurrows(map, burrows) {
+  for (const bw of burrows) {
+    const entryCx=bw.cx, entryCy=bw.cy <= ROWS/2 ? bw.cy+1 : bw.cy-1; // entrance faces map center
+    bw.entryCx=entryCx; bw.entryCy=entryCy;
+    for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+      const nx=bw.cx+dx, ny=bw.cy+dy;
+      if (nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
+      if (nx===entryCx && ny===entryCy) continue; // entrance stays walkable
+      map[ny][nx]=T_BURROW;
+    }
+  }
+}
+
 function walkable(cx,cy) {
   if (cx<0||cy<0||cx>=COLS||cy>=ROWS) return false;
-  return S.map[cy][cx]===T_EMPTY;
+  const t=S.map[cy][cx];
+  if (t===T_EMPTY) return true;
+  if (t===T_BURROW) return S.burrows.some(bw=>bw.entryCx===cx && bw.entryCy===cy);
+  return false;
 }
 
 // ── BURROW ────────────────────────────────────────────
@@ -140,10 +186,11 @@ function spawnGrass(type,count) {
 }
 
 // ── BUNDLE ────────────────────────────────────────────
-function makeBundle(cx,cy,type,carrier=null,offset=0) {
+function makeBundle(cx,cy,type,carrier=null,offset=0,owner=null) {
   const b = {id:_bid++, x:c2px(cx), y:c2px(cy), type, effectType:type,
              createdAt:Date.now(), isRipe:false, carrier, stored:false,
-             storedIn:null, stackOff:offset};
+             storedIn:null, stackOff:offset,
+             ownedBy:owner, ownedUntil:owner?Date.now()+2000:0};
   S.bundles.push(b);
   return b;
 }
@@ -246,12 +293,18 @@ class Char {
     this.hp=d.startHp; this.maxHp=d.maxHp;
     this.speed=d.speed; this.carryMax=d.carry;
     this.burrow=brow; brow.owner=this;
-    this.x=c2px(brow.cx); this.y=c2px(brow.cy);
+    // Start at entrance if available, otherwise burrow center
+    const ex=brow.entryCx!=null?brow.entryCx:brow.cx;
+    const ey=brow.entryCy!=null?brow.entryCy:brow.cy;
+    this.x=c2px(ex); this.y=c2px(ey);
     this.facing='down';
     this.carrying=[];
     this.isDead=false;
     this.swingCd=0; this.swingAnim=0;
+    this.stealCd=0; this.consumeCd=0;
+    this.attackHits=0; // hits received from attacker (for counter mechanic)
     this.aiState='SEEK'; this.aiTarget=null; this.aiTimer=0; this.aiStuck=0;
+    this.aiPath=null; this.aiPathTarget=null; this.aiPathTimer=0;
   }
   get cx() { return px2c(this.x); }
   get cy() { return px2c(this.y); }
@@ -302,8 +355,10 @@ function grassInRange(char) {
 
 function bundleInRange(char) {
   let best=null, bd=Infinity;
+  const now=Date.now();
   for (const b of S.bundles) {
     if (b.carrier||b.stored) continue;
+    if (b.ownedBy && b.ownedBy!==char && now<b.ownedUntil) continue;
     const bx=b.x+CELL/2, by=b.y+CELL/2;
     const d=pdist(char.midX,char.midY,bx,by);
     if (d<=INTERACT_PX && d<bd) { bd=d; best=b; }
@@ -321,10 +376,43 @@ function burrowInRange(char, includeOwn=true) {
 }
 
 // ── PLAYER ACTIONS ────────────────────────────────────
+// Check if a character is close enough to hit another
+function charInAttackRange(attacker) {
+  let best=null, bd=Infinity;
+  for (const ch of S.characters) {
+    if (ch===attacker||ch.isDead) continue;
+    const d=pdist(attacker.midX,attacker.midY,ch.midX,ch.midY);
+    if (d<=INTERACT_PX && d<bd) { bd=d; best=ch; }
+  }
+  return best;
+}
+
 function doSwing(char) {
   if (char.swingCd>0) return;
   char.swingCd=380; char.swingAnim=180;
   SFX.swing();
+
+  // Try to hit another character first
+  const target=charInAttackRange(char);
+  if (target) {
+    // Defender can cancel one attack hit if they have pending hits on attacker
+    if (target.attackHits>0 && char.attackHits>0) {
+      char.attackHits = Math.max(0, char.attackHits-1);
+      return;
+    }
+    target.attackHits = (target.attackHits||0)+1;
+    if (target.attackHits>=3) {
+      target.attackHits=0;
+      // Force target to drop all carried bundles
+      for (const b of [...target.carrying]) {
+        b.carrier=null; b.x=target.x; b.y=target.y;
+        b.ownedBy=null; b.ownedUntil=0;
+      }
+      target.carrying=[];
+    }
+    return;
+  }
+
   const g=grassInRange(char);
   if (!g) return;
   g.hits++;
@@ -332,11 +420,12 @@ function doSwing(char) {
     const i=S.grasses.indexOf(g);
     if (i>=0) S.grasses.splice(i,1);
     SFX.harvest();
-    const b=makeBundle(g.cx,g.cy,g.type);
-    if (bern(0.3)) makeBundle(g.cx,g.cy,g.type,null,3);
+    const b=makeBundle(g.cx,g.cy,g.type,null,0,char);
+    if (bern(0.3)) makeBundle(g.cx,g.cy,g.type,null,3,char);
     // auto-pickup
     if (char.carrying.length<char.carryMax) {
       b.carrier=char; char.carrying.push(b);
+      b.ownedBy=null;
     }
   }
 }
@@ -352,12 +441,14 @@ function doPickup(char) {
         // 최대치 → 하나 내려놓음
         const b=char.carrying.at(-1);
         b.carrier=null; b.x=char.x; b.y=char.y;
+        b.ownedBy=char; b.ownedUntil=Date.now()+2000;
         char.carrying.splice(char.carrying.length-1,1);
       }
     } else {
       // 근처 풀더미 없음 → 하나 내려놓음
       const b=char.carrying.at(-1);
       b.carrier=null; b.x=char.x; b.y=char.y;
+      b.ownedBy=char; b.ownedUntil=Date.now()+2000;
       char.carrying.splice(char.carrying.length-1,1);
     }
     return;
@@ -365,12 +456,15 @@ function doPickup(char) {
   // pull from nearby burrow
   const bw=burrowInRange(char,true);
   if (bw && bw.stored.length>0 && char.carrying.length<char.carryMax) {
+    const isOther = bw!==char.burrow;
+    if (isOther && char.stealCd>0) return;
     const b=bw.stored.at(-1);
     bw.stored.splice(bw.stored.length-1,1);
     bw.topBundle=bw.stored.at(-1)||null;
     bw.count--;
     b.stored=false; b.storedIn=null; b.carrier=char;
     char.carrying.push(b);
+    if (isOther) char.stealCd=2000;
     return;
   }
   // pickup from ground
@@ -384,12 +478,15 @@ function doConsume(char) {
   // from burrow
   const bw=burrowInRange(char,true);
   if (bw && bw.stored.length>0) {
+    const isOther = bw!==char.burrow;
+    if (isOther && char.consumeCd>0) return;
     const b=bw.stored.at(-1);
     bw.stored.splice(bw.stored.length-1,1);
     bw.topBundle=bw.stored.at(-1)||null;
     bw.count--;
     b.stored=false; b.storedIn=null;
     consumeBundle(b,char);
+    if (isOther) char.consumeCd=3000;
     return;
   }
   // from carrying
@@ -417,7 +514,9 @@ function checkAutoDeposit(char) {
 // ── AI ────────────────────────────────────────────────
 function updateAI(char, dt) {
   if (char.isDead) return;
-  char.swingCd = Math.max(0, char.swingCd-dt);
+  char.swingCd  = Math.max(0, char.swingCd-dt);
+  char.stealCd  = Math.max(0, (char.stealCd||0)-dt);
+  char.consumeCd= Math.max(0, (char.consumeCd||0)-dt);
   char.aiTimer -= dt;
 
   // Emergency: low HP, eat herb from carrying or nearby
@@ -483,8 +582,72 @@ function updateAI(char, dt) {
   }
 }
 
+// ── BFS PATHFINDING ───────────────────────────────────
+function bfsPath(startCx, startCy, goalCx, goalCy) {
+  if (startCx===goalCx && startCy===goalCy) return [];
+  const parent = new Int16Array(COLS*ROWS).fill(-1);
+  const startIdx = startCy*COLS+startCx;
+  const goalIdx  = goalCy*COLS+goalCx;
+  parent[startIdx] = startIdx;
+  const queue = [startIdx];
+  const dirs = [-COLS, COLS, -1, 1];
+  const borderCheck = [
+    idx=>((idx/COLS)|0)>0,
+    idx=>((idx/COLS)|0)<ROWS-1,
+    idx=>(idx%COLS)>0,
+    idx=>(idx%COLS)<COLS-1,
+  ];
+  let found = false;
+  outer: while (queue.length) {
+    const idx = queue.shift();
+    for (let d=0;d<4;d++) {
+      if (!borderCheck[d](idx)) continue;
+      const nIdx = idx+dirs[d];
+      if (parent[nIdx]>=0) continue;
+      const ny=(nIdx/COLS)|0, nx=nIdx%COLS;
+      if (S.map[ny][nx]!==T_EMPTY) continue;
+      parent[nIdx]=idx;
+      if (nIdx===goalIdx) { found=true; break outer; }
+      queue.push(nIdx);
+    }
+  }
+  if (!found) return null;
+  const path=[];
+  let cur=goalIdx;
+  while (cur!==startIdx) {
+    path.unshift([cur%COLS,(cur/COLS)|0]);
+    cur=parent[cur];
+  }
+  return path;
+}
+
 function aiMoveToward(char, tx, ty, dt) {
-  const dx=tx-char.x, dy=ty-char.y;
+  const goalCx=px2c(tx), goalCy=px2c(ty);
+  // Recalculate BFS path when target changes or timer expires
+  const targetChanged = !char.aiPathTarget ||
+    char.aiPathTarget[0]!==goalCx || char.aiPathTarget[1]!==goalCy;
+  if (targetChanged || !char.aiPath || char.aiPathTimer<=0) {
+    char.aiPath = bfsPath(char.cx, char.cy, goalCx, goalCy);
+    char.aiPathTarget = [goalCx, goalCy];
+    char.aiPathTimer = 800;
+  }
+  char.aiPathTimer -= dt;
+
+  // Advance path: pop nodes already reached
+  while (char.aiPath && char.aiPath.length>0) {
+    const [ncx,ncy]=char.aiPath[0];
+    const ndx=c2px(ncx)+CELL/2-char.midX, ndy=c2px(ncy)+CELL/2-char.midY;
+    if (Math.sqrt(ndx*ndx+ndy*ndy)<CELL*0.6) char.aiPath.shift();
+    else break;
+  }
+
+  let dx, dy;
+  if (char.aiPath && char.aiPath.length>0) {
+    const [ncx,ncy]=char.aiPath[0];
+    dx=c2px(ncx)+CELL/2-char.midX; dy=c2px(ncy)+CELL/2-char.midY;
+  } else {
+    dx=tx-char.x; dy=ty-char.y;
+  }
   const d=Math.sqrt(dx*dx+dy*dy);
   if (d<2) return;
   const spd=char.speed*CELL*(dt/1000);
@@ -504,6 +667,7 @@ function initGame() {
   // Randomise corners
   const corners=shuffle([...BURROW_CORNERS]);
   S.burrows=corners.map(c=>makeBurrow(c.cx,c.cy));
+  markBurrows(S.map, S.burrows);
 
   // All 4 char types, shuffle assignment
   const sel=state.selectedChar;
@@ -538,6 +702,8 @@ function updateGame(dt) {
 
     p.swingCd=Math.max(0,p.swingCd-dt);
     p.swingAnim=Math.max(0,p.swingAnim-dt);
+    p.stealCd=Math.max(0,(p.stealCd||0)-dt);
+    p.consumeCd=Math.max(0,(p.consumeCd||0)-dt);
 
     if (S.justPressed['a']||S.justPressed['A']||S.justPressed['ㅁ']) doSwing(p);
     if (S.justPressed['s']||S.justPressed['S']||S.justPressed['ㄴ']) doPickup(p);
@@ -569,7 +735,7 @@ function updateGame(dt) {
       spawnGrass('poison',poisson(3));
       spawnGrass('special',poisson(0.5));
       if (S.grasses.length>=50) S.grassPaused=true;
-    } else if (tot<35) {
+    } else if (tot<45) {
       S.grassPaused=false;
     }
   }
@@ -611,6 +777,7 @@ const TILE_CLR=[
   ['#4e7a40','#5a8a4a'],  // empty
   ['#7a7060','#8a8070'],  // rock
   ['#2a5a9a','#3a6aaa'],  // water
+  ['#3a2a1a','#4a3a2a'],  // burrow
 ];
 
 function render() {
@@ -627,7 +794,14 @@ function drawMap() {
     const t=S.map[cy][cx];
     ctx.fillStyle=TILE_CLR[t][(cx+cy)%2];
     ctx.fillRect(cx*CELL,cy*CELL,CELL,CELL);
+    if (t===T_ROCK||t===T_WATER) {
+      ctx.font=`${CELL-4}px serif`;
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(t===T_ROCK?'🪨':'💧', cx*CELL+CELL/2, cy*CELL+CELL/2);
+    }
   }
+  ctx.textBaseline='alphabetic';
 }
 
 function drawBurrows() {
@@ -654,6 +828,11 @@ function drawBurrows() {
       ctx.font='bold 8px monospace';
       ctx.fillText(bw.owner.name,px+sz/2,py+9);
     }
+    // Entrance (black cell at bottom-center)
+    if (bw.entryCx!=null) {
+      ctx.fillStyle='#000';
+      ctx.fillRect(c2px(bw.entryCx), c2px(bw.entryCy), CELL, CELL);
+    }
     // Top bundle indicator
     if (bw.topBundle) {
       const bc=bundleColor(bw.topBundle);
@@ -672,20 +851,22 @@ function bundleColor(b) {
   return '#aaa';
 }
 
+const GRASS_EMOJI = { herb:'🌿', poison:'🍄', special:'🌸' };
+
 function drawGrasses() {
+  ctx.font=`${CELL-2}px serif`;
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
   for (const g of S.grasses) {
     const px=c2px(g.cx), py=c2px(g.cy);
-    const clr=g.type==='herb'?'#27ae60':g.type==='poison'?'#8e44ad':'#d4ac0d';
-    ctx.fillStyle=clr;
-    // simple grass blade icon
-    ctx.fillRect(px+4,py+8,8,6);  // leaf
-    ctx.fillRect(px+6,py+3,4,7);  // stem
+    ctx.fillText(GRASS_EMOJI[g.type]||'🌿', px+CELL/2, py+CELL/2);
     // harvest bar
     if (g.hits>0) {
-      ctx.fillStyle='rgba(255,255,255,0.8)';
-      ctx.fillRect(px+2,py+14,(CELL-4)*(g.hits/3),2);
+      ctx.fillStyle='rgba(255,255,255,0.85)';
+      ctx.fillRect(px+2,py+CELL-3,(CELL-4)*(g.hits/3),2);
     }
   }
+  ctx.textBaseline='alphabetic';
 }
 
 function drawBundles() {
@@ -732,56 +913,32 @@ function drawChars() {
 }
 
 function drawDeadChar(ch) {
-  ctx.globalAlpha=0.4;
-  ctx.fillStyle='#888';
-  ctx.fillRect(ch.x+1,ch.y+5,CELL-2,CELL-9);
+  ctx.globalAlpha=0.45;
+  ctx.font=`${CELL}px serif`;
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText('💀', ch.x+CELL/2, ch.y+CELL/2);
   ctx.globalAlpha=1;
+  ctx.textBaseline='alphabetic';
 }
 
+const CHAR_EMOJI = { pika:'🐰', rpika:'🐑', pyka:'🐇', hika:'🤠' };
+
 function drawChar(ch) {
-  const {x,y,color,earColor,facing,swingAnim,isPlayer,type} = ch;
+  const {x,y,facing,swingAnim,isPlayer,type} = ch;
 
-  // Ears
-  ctx.fillStyle=earColor;
-  if (type==='rpika') {
-    ctx.fillRect(x,y-4,6,8); ctx.fillRect(x+CELL-6,y-4,6,8);
-    // fluffy dots
-    ctx.fillStyle='#fff';
-    ctx.fillRect(x+1,y-3,2,5); ctx.fillRect(x+CELL-5,y-3,2,5);
-  } else if (type==='pyka') {
-    ctx.fillRect(x+4,y,3,5); ctx.fillRect(x+CELL-7,y,3,5);
-  } else if (type==='hika') {
-    // hat brim
-    ctx.fillStyle='#3a2010';
-    ctx.fillRect(x-1,y-1,CELL+2,3);
-    ctx.fillRect(x+3,y-7,CELL-6,7);
-    ctx.fillStyle=earColor;
-    ctx.fillRect(x+3,y+1,2,4); ctx.fillRect(x+CELL-5,y+1,2,4);
-  } else {
-    ctx.fillRect(x+3,y-1,3,6); ctx.fillRect(x+CELL-6,y-1,3,6);
-  }
+  // Emoji body
+  ctx.font=`${CELL+2}px serif`;
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText(CHAR_EMOJI[type]||'🐰', x+CELL/2, y+CELL/2);
+  ctx.textBaseline='alphabetic';
 
-  // Body
-  ctx.fillStyle=color;
-  ctx.fillRect(x+2,y+4,CELL-4,CELL-6);
-
-  // Rpika fur texture
-  if (type==='rpika') {
-    ctx.fillStyle='rgba(255,255,255,0.3)';
-    ctx.fillRect(x+3,y+5,4,3); ctx.fillRect(x+9,y+8,3,3);
-  }
-
-  // Eyes
-  ctx.fillStyle='#111';
-  if (facing==='left')       { ctx.fillRect(x+2,y+7,2,2); }
-  else if (facing==='right') { ctx.fillRect(x+CELL-4,y+7,2,2); }
-  else { ctx.fillRect(x+3,y+7,2,2); ctx.fillRect(x+CELL-5,y+7,2,2); }
-
-  // Player white outline
+  // Player indicator: white outline around cell
   if (isPlayer) {
-    ctx.strokeStyle='rgba(255,255,255,0.8)';
-    ctx.lineWidth=1.5;
-    ctx.strokeRect(x+2,y+4,CELL-4,CELL-6);
+    ctx.strokeStyle='rgba(255,255,255,0.85)';
+    ctx.lineWidth=2;
+    ctx.strokeRect(x,y,CELL,CELL);
     ctx.lineWidth=1;
   }
 
@@ -790,20 +947,20 @@ function drawChar(ch) {
     ctx.globalAlpha=swingAnim/180*0.7;
     ctx.fillStyle='#ffe060';
     let ax=x+CELL/2, ay=y+CELL/2;
-    if (facing==='right')      ax+=CELL-2;
-    else if (facing==='left')  ax-=CELL-2;
-    else if (facing==='down')  ay+=CELL-2;
-    else                        ay-=CELL-2;
+    if (facing==='right')      ax+=CELL;
+    else if (facing==='left')  ax-=CELL;
+    else if (facing==='down')  ay+=CELL;
+    else                        ay-=CELL;
     ctx.beginPath(); ctx.arc(ax,ay,5,0,Math.PI*2); ctx.fill();
     ctx.globalAlpha=1;
   }
 
   // HP bar
   const hpR=ch.hp/ch.maxHp;
-  ctx.fillStyle='#222';
-  ctx.fillRect(x,y+CELL+1,CELL,2);
+  ctx.fillStyle='#111';
+  ctx.fillRect(x,y+CELL+1,CELL,3);
   ctx.fillStyle=hpR>0.5?'#2ecc40':hpR>0.25?'#f39c12':'#e74c3c';
-  ctx.fillRect(x,y+CELL+1,CELL*hpR,2);
+  ctx.fillRect(x,y+CELL+1,CELL*hpR,3);
 
   // Name
   ctx.fillStyle=isPlayer?'#fff':'#ddd';
@@ -973,7 +1130,7 @@ function buildCharSelect() {
     card.className='char-card'+(save.lastChar===type?' last-played':'')+(i===0?' focused':'');
     card.innerHTML=`
       <div class="char-key">${i===0?'← →':''}</div>
-      <div class="char-icon" style="background:${def.color}"></div>
+      <div class="char-emoji-icon">${CHAR_EMOJI[type]}</div>
       <div class="char-name">${def.name}</div>
       <div class="char-desc">${def.desc}</div>
       <div class="char-stats">
