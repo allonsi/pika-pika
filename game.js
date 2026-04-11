@@ -5,10 +5,10 @@
 
 // ── CONSTANTS ─────────────────────────────────────────
 const CELL        = 16;
-const COLS        = 50;
-const ROWS        = 50;
-const CW          = COLS * CELL;   // 800
-const CH          = ROWS * CELL;   // 800
+const COLS        = 30;
+const ROWS        = 30;
+const CW          = COLS * CELL;   // 480
+const CH          = ROWS * CELL;   // 480
 const WIN_COUNT   = 30;
 const RIPEN_MS    = 10000;
 const HP_DRAIN_S  = 1;
@@ -30,9 +30,9 @@ const CHAR_DEFS = {
 
 const BURROW_CORNERS = [
   { cx:1,  cy:1  },
-  { cx:48, cy:1  },
-  { cx:1,  cy:48 },
-  { cx:48, cy:48 },
+  { cx:28, cy:1  },
+  { cx:1,  cy:28 },
+  { cx:28, cy:28 },
 ];
 
 // ── STORY ─────────────────────────────────────────────
@@ -342,11 +342,24 @@ function doSwing(char) {
 }
 
 function doPickup(char) {
-  // if carrying: drop last bundle onto map
   if (char.carrying.length>0) {
-    const b=char.carrying.at(-1);
-    b.carrier=null; b.x=char.x; b.y=char.y;
-    char.carrying.splice(char.carrying.length-1,1);
+    const nearby=bundleInRange(char);
+    if (nearby) {
+      if (char.carrying.length<char.carryMax) {
+        // 근처 풀더미 추가 픽업
+        nearby.carrier=char; char.carrying.push(nearby);
+      } else {
+        // 최대치 → 하나 내려놓음
+        const b=char.carrying.at(-1);
+        b.carrier=null; b.x=char.x; b.y=char.y;
+        char.carrying.splice(char.carrying.length-1,1);
+      }
+    } else {
+      // 근처 풀더미 없음 → 하나 내려놓음
+      const b=char.carrying.at(-1);
+      b.carrier=null; b.x=char.x; b.y=char.y;
+      char.carrying.splice(char.carrying.length-1,1);
+    }
     return;
   }
   // pull from nearby burrow
@@ -526,9 +539,9 @@ function updateGame(dt) {
     p.swingCd=Math.max(0,p.swingCd-dt);
     p.swingAnim=Math.max(0,p.swingAnim-dt);
 
-    if (S.justPressed['a']||S.justPressed['A']) doSwing(p);
-    if (S.justPressed['s']||S.justPressed['S']) doPickup(p);
-    if (S.justPressed['d']||S.justPressed['D']) doConsume(p);
+    if (S.justPressed['a']||S.justPressed['A']||S.justPressed['ㅁ']) doSwing(p);
+    if (S.justPressed['s']||S.justPressed['S']||S.justPressed['ㄴ']) doPickup(p);
+    if (S.justPressed['d']||S.justPressed['D']||S.justPressed['ㅇ']) doConsume(p);
 
     checkAutoDeposit(p);
   }
@@ -873,7 +886,7 @@ function stopLoop() {
 }
 
 // ── SCREEN MANAGEMENT ────────────────────────────────
-const state = { screen:'title', selectedChar:null, storyIdx:0 };
+const state = { screen:'title', selectedChar:null, storyIdx:0, charSelectIdx:0 };
 
 function showScreen(name) {
   state.screen=name;
@@ -938,16 +951,22 @@ function startCountdown() {
 }
 
 // ── CHAR SELECT ───────────────────────────────────────
+function highlightCharCard(idx) {
+  document.querySelectorAll('.char-card').forEach((c,i)=>{
+    c.classList.toggle('focused', i===idx);
+  });
+}
+
 function buildCharSelect() {
+  state.charSelectIdx=0;
   const save=loadSave();
   const grid=document.getElementById('charselect-grid');
   grid.innerHTML='';
-  const keys=['Enter','A','S','D'];
   Object.entries(CHAR_DEFS).forEach(([type,def],i)=>{
     const card=document.createElement('div');
-    card.className='char-card'+(save.lastChar===type?' last-played':'');
+    card.className='char-card'+(save.lastChar===type?' last-played':'')+(i===0?' focused':'');
     card.innerHTML=`
-      <div class="char-key">[${keys[i]}]</div>
+      <div class="char-key">${i===0?'← →':''}</div>
       <div class="char-icon" style="background:${def.color}"></div>
       <div class="char-name">${def.name}</div>
       <div class="char-desc">${def.desc}</div>
@@ -978,10 +997,15 @@ window.addEventListener('keydown', e=>{
 
   if (state.screen==='charselect') {
     const types=['pika','rpika','pyka','hika'];
-    if (e.key==='Enter') pickChar(types[0]);
-    else if (e.key==='a'||e.key==='A') pickChar(types[1]);
-    else if (e.key==='s'||e.key==='S') pickChar(types[2]);
-    else if (e.key==='d'||e.key==='D') pickChar(types[3]);
+    if (e.key==='ArrowLeft') {
+      state.charSelectIdx=(state.charSelectIdx-1+types.length)%types.length;
+      highlightCharCard(state.charSelectIdx);
+    } else if (e.key==='ArrowRight') {
+      state.charSelectIdx=(state.charSelectIdx+1)%types.length;
+      highlightCharCard(state.charSelectIdx);
+    } else if (e.key==='Enter') {
+      pickChar(types[state.charSelectIdx]);
+    }
   }
   if (state.screen==='story' && (e.key==='Enter'||e.key===' ')) advanceStory();
 });
