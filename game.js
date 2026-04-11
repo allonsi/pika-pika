@@ -4,11 +4,11 @@
 // ════════════════════════════════════════════════════════
 
 // ── CONSTANTS ─────────────────────────────────────────
-const CELL        = 16;
+const CELL        = 20;
 const COLS        = 30;
 const ROWS        = 30;
-const CW          = COLS * CELL;   // 480
-const CH          = ROWS * CELL;   // 480
+const CW          = COLS * CELL;   // 600
+const CH          = ROWS * CELL;   // 600
 const WIN_COUNT   = 30;
 const RIPEN_MS    = 10000;
 const HP_DRAIN_S  = 1;
@@ -829,18 +829,24 @@ function updateHUD() {
     <div style="font-size:12px;color:#aaa">이동속도: <strong style="color:#fff">${p.speed}</strong></div>
     <div style="font-size:12px;color:#aaa">최대 운반: <strong style="color:#fff">${p.carryMax}</strong></div>`;
 
-  const carryHtml=p.carrying.length?p.carrying.map(b=>{
+  const carryHtml=p.carrying.length?[...p.carrying].reverse().map((b,revIdx)=>{
+    const num=p.carrying.length-revIdx;
     const clr=bundleColor(b);
     const pct=Math.min(100,(now-b.createdAt)/RIPEN_MS*100|0);
-    return `<span style="color:${clr};font-size:12px">■ ${b.type[0].toUpperCase()} ${b.isRipe?'✓':pct+'%'}</span>`;
-  }).join('<br>'):'<span style="color:#555;font-size:11px">없음</span>';
+    return `<div style="display:flex;align-items:center;gap:5px">
+      <span style="color:#555;font-size:10px;min-width:10px;text-align:right">${num}</span>
+      <span style="color:${clr};font-size:12px">■ ${b.type[0].toUpperCase()} ${b.isRipe?'✓':pct+'%'}</span>
+    </div>`;
+  }).join(''):'<span style="color:#555;font-size:11px">없음</span>';
   document.getElementById('hud-carrying').innerHTML=`
     <div class="hud-label">운반 중 (${p.carrying.length}/${p.carryMax})</div>${carryHtml}`;
 
-  const ripenHtml=p.carrying.length?p.carrying.map(b=>{
+  const ripenHtml=p.carrying.length?[...p.carrying].reverse().map((b,revIdx)=>{
+    const num=p.carrying.length-revIdx;
     const clr=bundleColor(b);
     const pct=Math.min(100,(now-b.createdAt)/RIPEN_MS*100|0);
     return `<div class="hud-ripen">
+      <span style="color:#555;font-size:10px;min-width:10px;text-align:right">${num}</span>
       <span style="color:${clr}">■</span>
       <div class="hud-bar"><div class="hud-bar-fill" style="width:${pct}%;background:${clr}"></div></div>
       ${b.isRipe?'<span style="color:#aaa;font-size:10px">완료</span>':''}
@@ -1007,7 +1013,11 @@ window.addEventListener('keydown', e=>{
       pickChar(types[state.charSelectIdx]);
     }
   }
-  if (state.screen==='story' && (e.key==='Enter'||e.key===' ')) advanceStory();
+  if (e.key==='Enter'||e.key===' ') {
+    if (state.screen==='title') document.getElementById('btn-title-start').click();
+    else if (state.screen==='rules') document.getElementById('btn-rules-start').click();
+    else if (state.screen==='story') advanceStory();
+  }
 });
 
 window.addEventListener('keyup', e=>{

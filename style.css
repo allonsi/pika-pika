@@ -352,7 +352,7 @@ body {
 /* ─── HUD ─────────────────────────────────────────── */
 #hud-panel {
   width: 220px;
-  height: 480px;
+  height: 600px;
   background: var(--panel);
   overflow-y: auto;
   padding: 12px;
