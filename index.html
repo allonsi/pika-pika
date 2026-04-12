@@ -56,23 +56,31 @@
         <h3>조작</h3>
         <table class="controls-table">
           <tr><td>↑↓←→</td><td>이동</td></tr>
-          <tr><td>A</td><td>앞다리 휘두르기 (3회 → 수확)</td></tr>
-          <tr><td>S</td><td>풀더미 입에 물기 / 내려놓기</td></tr>
-          <tr><td>D</td><td>풀더미 소비 (효과 발동)</td></tr>
+          <tr><td>A</td><td>앞다리 휘두르기 — 🌿🍄🌸 3회 → 수확 / 상대 3회 → 낙하</td></tr>
+          <tr><td>S</td><td>풀더미 줍기 / 내려놓기 (굴 근처: 굴에서 꺼내기)</td></tr>
+          <tr><td>D</td><td>풀더미 소비 — 🌿 HP↑ / 🍄 HP↓ / 🌸 랜덤 버프</td></tr>
         </table>
       </div>
       <div class="rules-col">
-        <h3>풀 종류</h3>
-        <ul>
-          <li><span class="dot herb">●</span> 약초 — 수확 후 10초 숙성 전: HP +15~30 / 숙성 후: HP +3</li>
-          <li><span class="dot poison">●</span> 독초 — 수확 후 10초 숙성 전: HP -1~10 / 숙성 후 약초로 변환</li>
-          <li><span class="dot special">●</span> 특수초 — 숙성 후 랜덤 버프 (HP·속도·운반량 ↑)</li>
-        </ul>
+        <h3>풀 → 풀더미 (A 3회 수확)</h3>
+        <table class="controls-table">
+          <tr><td>🌿 → <span style="display:inline-block;width:12px;height:10px;background:#2ecc40;vertical-align:middle;border-radius:2px"></span></td><td>약초 — 숙성 전: HP +15~30</td></tr>
+          <tr><td>🍄 → <span style="display:inline-block;width:12px;height:10px;background:#9b59b6;vertical-align:middle;border-radius:2px"></span></td><td>독초 — 숙성 전: HP -1~10</td></tr>
+          <tr><td>🌸 → <span style="display:inline-block;width:12px;height:10px;background:#f1c40f;vertical-align:middle;border-radius:2px"></span></td><td>특수초 — 숙성 전: 랜덤 페널티</td></tr>
+        </table>
+        <h3>숙성 효과 (10초 후)</h3>
+        <table class="controls-table">
+          <tr><td><span style="display:inline-block;width:12px;height:10px;background:#ddd;vertical-align:middle;border-radius:2px"></span> 약초</td><td>HP +3 (고정)</td></tr>
+          <tr><td><span style="display:inline-block;width:12px;height:10px;background:#2ecc40;vertical-align:middle;border-radius:2px"></span> 독초</td><td>약초더미로 변환!</td></tr>
+          <tr><td>🌸✨ 특수초</td><td>HP·속도·운반량 중 하나 ↑</td></tr>
+        </table>
         <h3>주의</h3>
         <ul>
+          <li>🪨💧 장애물 통과 불가</li>
           <li>HP가 매 초 1씩 감소합니다</li>
           <li>HP가 0이 되면 패배!</li>
-          <li>굴에 도착하면 자동 입고</li>
+          <li>굴 입구(■)에 도착하면 자동 입고</li>
+          <li>상대에게 A 3회 맞으면 풀더미 낙하</li>
         </ul>
       </div>
     </div>
@@ -97,6 +105,13 @@
     <div class="hud-section" id="hud-carrying"></div>
     <div class="hud-section" id="hud-ripening"></div>
     <div class="hud-section" id="hud-burrows"></div>
+    <div class="hud-section hud-legend">
+      <div class="hud-label">풀 / 풀더미</div>
+      <div class="hud-legend-row"><span class="hud-grass-icon">🌿</span><span class="hud-bundle-swatch" style="background:#2ecc40"></span> 약초</div>
+      <div class="hud-legend-row"><span class="hud-grass-icon">🍄</span><span class="hud-bundle-swatch" style="background:#9b59b6"></span> 독초</div>
+      <div class="hud-legend-row"><span class="hud-grass-icon">🌸</span><span class="hud-bundle-swatch" style="background:#f1c40f"></span> 특수초</div>
+      <div class="hud-legend-row" style="margin-top:4px;color:#888;font-size:10px">숙성 후: <span class="hud-bundle-swatch" style="background:#ddd"></span> 약초→HP+3 &nbsp;<span class="hud-bundle-swatch" style="background:#2ecc40"></span>독초→약초</div>
+    </div>
     <div class="hud-section hud-controls">
       <div class="hud-label">조작</div>
       <div class="hud-ctrl-row"><kbd>↑↓←→</kbd> 이동</div>

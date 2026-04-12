@@ -369,7 +369,8 @@ function bundleInRange(char) {
 function burrowInRange(char, includeOwn=true) {
   for (const bw of S.burrows) {
     if (!includeOwn && bw===char.burrow) continue;
-    const d=pdist(char.midX,char.midY,c2px(bw.cx)+CELL/2,c2px(bw.cy)+CELL/2);
+    const ep=burrowEntryPx(bw);
+    const d=pdist(char.midX,char.midY,ep.x,ep.y);
     if (d<=INTERACT_PX*2) return bw;
   }
   return null;
@@ -502,16 +503,46 @@ function doConsume(char) {
   if (b) consumeBundle(b,char);
 }
 
+function burrowEntryPx(bw) {
+  const ex = bw.entryCx!=null ? bw.entryCx : bw.cx;
+  const ey = bw.entryCy!=null ? bw.entryCy : bw.cy;
+  return { x: c2px(ex)+CELL/2, y: c2px(ey)+CELL/2 };
+}
+
 function checkAutoDeposit(char) {
   if (!char.carrying.length) return;
   const bw=char.burrow;
-  const d=pdist(char.midX,char.midY,c2px(bw.cx)+CELL/2,c2px(bw.cy)+CELL/2);
+  const ep=burrowEntryPx(bw);
+  const d=pdist(char.midX,char.midY,ep.x,ep.y);
   if (d<=INTERACT_PX*2) {
     while (char.carrying.length) depositBundle(char.carrying[0],bw);
   }
 }
 
 // ── AI ────────────────────────────────────────────────
+function nearestHerbBundle(char) {
+  let best=null, bd=Infinity;
+  const now=Date.now();
+  for (const b of S.bundles) {
+    if (b.carrier||b.stored) continue;
+    if (b.ownedBy && b.ownedBy!==char && now<b.ownedUntil) continue;
+    if (b.effectType!=='herb') continue;
+    const d=pdist(char.midX,char.midY,b.x+CELL/2,b.y+CELL/2);
+    if (d<bd) { bd=d; best=b; }
+  }
+  return best;
+}
+
+function nearestHerbGrass(char) {
+  let best=null, bd=Infinity;
+  for (const g of S.grasses) {
+    if (g.type!=='herb') continue;
+    const d=pdist(char.midX,char.midY,c2px(g.cx)+CELL/2,c2px(g.cy)+CELL/2);
+    if (d<bd) { bd=d; best=g; }
+  }
+  return best;
+}
+
 function updateAI(char, dt) {
   if (char.isDead) return;
   char.swingCd  = Math.max(0, char.swingCd-dt);
@@ -519,31 +550,86 @@ function updateAI(char, dt) {
   char.consumeCd= Math.max(0, (char.consumeCd||0)-dt);
   char.aiTimer -= dt;
 
-  // Emergency: low HP, eat herb from carrying or nearby
-  if (char.hp/char.maxHp < 0.25) {
-    const h=char.carrying.find(b=>b.effectType==='herb'||(b.type==='poison'&&b.isRipe));
-    if (h) { const i=char.carrying.indexOf(h); char.carrying.splice(i,1); h.carrier=null; consumeBundle(h,char); return; }
-    // Look for ripe poison (becomes herb)
+  // ── Stuck detection: reset path if position unchanged for 1.5s ──
+  if (!char._lastPos) char._lastPos={x:char.x,y:char.y,t:0};
+  if (Math.abs(char.x-char._lastPos.x)>1||Math.abs(char.y-char._lastPos.y)>1) {
+    char._lastPos={x:char.x,y:char.y,t:0};
+  } else {
+    char._lastPos.t+=dt;
+    if (char._lastPos.t>1500) {
+      // Stuck — clear BFS cache and reset to SEEK
+      char.aiPath=null; char.aiPathTarget=null; char.aiPathTimer=0;
+      char._lastPos.t=0;
+      if (char.aiState!=='IDLE') { char.aiState='SEEK'; char.aiTarget=null; }
+    }
+  }
+
+  // ── HP survival: eat carried herb if HP < 50% ──
+  const hpRatio = char.hp/char.maxHp;
+  if (hpRatio < 0.5) {
+    const h=char.carrying.find(b=>b.effectType==='herb'||(b.effectType==='poison'&&b.isRipe));
+    if (h) {
+      const i=char.carrying.indexOf(h); char.carrying.splice(i,1); h.carrier=null;
+      consumeBundle(h,char); return;
+    }
+  }
+
+  // ── HP survival: seek herb bundle/grass if HP < 40% ──
+  if (hpRatio < 0.4 && char.aiState!=='EAT_HERB') {
+    const hb=nearestHerbBundle(char);
+    if (hb) { char.aiState='EAT_HERB'; char.aiTarget=hb; }
+    else {
+      const hg=nearestHerbGrass(char);
+      if (hg) { char.aiState='HARVEST_HERB'; char.aiTarget=hg; }
+    }
   }
 
   const beh=char.behavior;
   switch(char.aiState) {
+
+    case 'EAT_HERB': {
+      const hb=char.aiTarget;
+      if (!hb||hb.carrier||hb.stored) { char.aiState='SEEK'; break; }
+      aiMoveToward(char, hb.x, hb.y, dt);
+      if (pdist(char.midX,char.midY,hb.x+CELL/2,hb.y+CELL/2)<=INTERACT_PX) {
+        if (char.carrying.length<char.carryMax) {
+          hb.carrier=char; char.carrying.push(hb);
+        }
+        // eat immediately
+        const i=char.carrying.indexOf(hb);
+        if (i>=0) { char.carrying.splice(i,1); hb.carrier=null; consumeBundle(hb,char); }
+        char.aiState='SEEK'; char.aiTarget=null;
+      }
+      break;
+    }
+
+    case 'HARVEST_HERB': {
+      const hg=char.aiTarget;
+      if (!hg||!S.grasses.includes(hg)) { char.aiState='SEEK'; break; }
+      aiMoveToward(char,c2px(hg.cx),c2px(hg.cy),dt);
+      if (pdist(char.midX,char.midY,c2px(hg.cx)+CELL/2,c2px(hg.cy)+CELL/2)<=INTERACT_PX) {
+        char.facing=char.midX<c2px(hg.cx)+CELL/2?'right':'left';
+        doSwing(char);
+        // After harvest, bundle auto-picked up → will eat on next tick via carry check
+        if (!S.grasses.includes(hg)) { char.aiState='SEEK'; char.aiTarget=null; }
+      }
+      break;
+    }
+
     case 'SEEK': {
       // Thief: occasionally steal if opponent burrow has many bundles
       if (beh==='thief' && bern(0.002) && char.carrying.length===0) {
         const rich=S.burrows.filter(b=>b!==char.burrow&&b.count>3).sort((a,b_)=>b_.count-a.count)[0];
         if (rich) { char.aiState='STEAL'; char.aiTarget=rich; break; }
       }
-      // Defensive: eat ripe poison-now-herb bundles near own burrow
+      // Defensive: deposit immediately when carrying
       if (beh==='defensive' && char.carrying.length>0) {
         char.aiState='DEPOSIT'; break;
       }
       const g=nearestGrass(char);
       if (!g) { char.aiState='IDLE'; break; }
       char.aiTarget=g;
-      // Move toward grass
-      const tx=c2px(g.cx), ty=c2px(g.cy);
-      aiMoveToward(char,tx,ty,dt);
+      aiMoveToward(char,c2px(g.cx),c2px(g.cy),dt);
       if (pdist(char.midX,char.midY,c2px(g.cx)+CELL/2,c2px(g.cy)+CELL/2)<=INTERACT_PX) {
         char.facing=char.midX<c2px(g.cx)+CELL/2?'right':'left';
         doSwing(char);
@@ -552,30 +638,36 @@ function updateAI(char, dt) {
       if (char.carrying.length>=char.carryMax) char.aiState='DEPOSIT';
       break;
     }
+
     case 'DEPOSIT': {
       const bw=char.burrow;
-      aiMoveToward(char, c2px(bw.cx), c2px(bw.cy), dt);
+      const ep=burrowEntryPx(bw);
+      aiMoveToward(char, ep.x-CELL/2, ep.y-CELL/2, dt);
       checkAutoDeposit(char);
       if (!char.carrying.length) char.aiState='SEEK';
       break;
     }
+
     case 'STEAL': {
       const bw=char.aiTarget;
       if (!bw||bw.count===0) { char.aiState='SEEK'; break; }
-      aiMoveToward(char, c2px(bw.cx), c2px(bw.cy), dt);
-      if (pdist(char.midX,char.midY,c2px(bw.cx)+CELL/2,c2px(bw.cy)+CELL/2)<=INTERACT_PX*2) {
-        if (bw.stored.length>0 && char.carrying.length<char.carryMax) {
+      const ep=burrowEntryPx(bw);
+      aiMoveToward(char, ep.x-CELL/2, ep.y-CELL/2, dt);
+      if (pdist(char.midX,char.midY,ep.x,ep.y)<=INTERACT_PX*2) {
+        if (bw.stored.length>0 && char.carrying.length<char.carryMax && char.stealCd<=0) {
           const b=bw.stored.at(-1);
           bw.stored.splice(bw.stored.length-1,1);
           bw.topBundle=bw.stored.at(-1)||null;
           bw.count--;
           b.stored=false; b.storedIn=null; b.carrier=char;
           char.carrying.push(b);
+          char.stealCd=2000;
         }
         if (char.carrying.length>=char.carryMax||bw.count===0) char.aiState='DEPOSIT';
       }
       break;
     }
+
     case 'IDLE':
       if (char.aiTimer<=0) { char.aiTimer=1000; char.aiState='SEEK'; }
       break;
@@ -605,7 +697,7 @@ function bfsPath(startCx, startCy, goalCx, goalCy) {
       const nIdx = idx+dirs[d];
       if (parent[nIdx]>=0) continue;
       const ny=(nIdx/COLS)|0, nx=nIdx%COLS;
-      if (S.map[ny][nx]!==T_EMPTY) continue;
+      if (!walkable(nx,ny)) continue;
       parent[nIdx]=idx;
       if (nIdx===goalIdx) { found=true; break outer; }
       queue.push(nIdx);
@@ -833,11 +925,20 @@ function drawBurrows() {
       ctx.fillStyle='#000';
       ctx.fillRect(c2px(bw.entryCx), c2px(bw.entryCy), CELL, CELL);
     }
-    // Top bundle indicator
+    // Top bundle indicator — large colored square in top-right of burrow
     if (bw.topBundle) {
       const bc=bundleColor(bw.topBundle);
+      const bsz=10;
+      ctx.fillStyle='rgba(0,0,0,0.5)';
+      ctx.fillRect(px+sz-bsz-3, py+3, bsz+2, bsz+2);
       ctx.fillStyle=bc;
-      ctx.fillRect(px+sz-7,py+3,5,4);
+      ctx.fillRect(px+sz-bsz-2, py+4, bsz, bsz);
+      // Ripe special flash
+      if (bw.topBundle.isRipe && bw.topBundle.type==='special' && Math.sin(Date.now()/200)>0) {
+        ctx.strokeStyle='#ff2020'; ctx.lineWidth=1.5;
+        ctx.strokeRect(px+sz-bsz-2, py+4, bsz, bsz);
+        ctx.lineWidth=1;
+      }
     }
   }
 }
@@ -1167,13 +1268,14 @@ window.addEventListener('keydown', e=>{
       state.charSelectIdx=(state.charSelectIdx+1)%types.length;
       highlightCharCard(state.charSelectIdx);
     } else if (e.key==='Enter') {
+      e.preventDefault();
       pickChar(types[state.charSelectIdx]);
+      return; // prevent fall-through to story handler
     }
-  }
-  if (e.key==='Enter'||e.key===' ') {
+  } else if (e.key==='Enter'||e.key===' ') {
     if (state.screen==='title') document.getElementById('btn-title-start').click();
     else if (state.screen==='rules') document.getElementById('btn-rules-start').click();
-    else if (state.screen==='story') advanceStory();
+    else if (state.screen==='story') { e.preventDefault(); advanceStory(); }
   }
 });
 

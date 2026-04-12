@@ -405,6 +405,23 @@ body {
 .hud-burrow-row:last-child { border-bottom: none; }
 .hud-burrow-row.my-burrow { color: var(--accent2); font-weight: 700; }
 
+.hud-legend { font-size: 11px; }
+.hud-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+  color: var(--muted);
+}
+.hud-grass-icon { font-size: 13px; line-height: 1; }
+.hud-bundle-swatch {
+  display: inline-block;
+  width: 11px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 .hud-controls { font-size: 11px; }
 .hud-ctrl-row {
   display: flex;
