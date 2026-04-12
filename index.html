@@ -38,6 +38,7 @@
     <div class="story-footer">
       <span class="story-progress" id="story-progress"></span>
       <div class="story-btns">
+        <button class="btn btn-secondary" id="btn-story-back">← 이전</button>
         <button class="btn btn-secondary" id="btn-story-skip">SKIP</button>
         <button class="btn btn-primary" id="btn-story-next">다음 →</button>
       </div>
@@ -58,7 +59,7 @@
           <tr><td>↑↓←→</td><td>이동</td></tr>
           <tr><td>A</td><td>앞다리 휘두르기 — 🌿🍄🌸 3회 → 수확 / 상대 3회 → 낙하</td></tr>
           <tr><td>S</td><td>풀더미 줍기 / 내려놓기 (굴 근처: 굴에서 꺼내기)</td></tr>
-          <tr><td>D</td><td>풀더미 소비 — 🌿 HP↑ / 🍄 HP↓ / 🌸 랜덤 버프</td></tr>
+          <tr><td>D</td><td>수확한 풀더미 소비 — 🌿 HP↑ / 🍄 HP↓ / 🌸 랜덤 버프 or 너프</td></tr>
         </table>
       </div>
       <div class="rules-col">
@@ -66,13 +67,13 @@
         <table class="controls-table">
           <tr><td>🌿 → <span style="display:inline-block;width:12px;height:10px;background:#2ecc40;vertical-align:middle;border-radius:2px"></span></td><td>약초 — 숙성 전: HP +15~30</td></tr>
           <tr><td>🍄 → <span style="display:inline-block;width:12px;height:10px;background:#9b59b6;vertical-align:middle;border-radius:2px"></span></td><td>독초 — 숙성 전: HP -1~10</td></tr>
-          <tr><td>🌸 → <span style="display:inline-block;width:12px;height:10px;background:#f1c40f;vertical-align:middle;border-radius:2px"></span></td><td>특수초 — 숙성 전: 랜덤 페널티</td></tr>
+          <tr><td>🌸 → <span style="display:inline-block;width:12px;height:10px;background:#f1c40f;vertical-align:middle;border-radius:2px"></span></td><td>특수초 — 숙성 전: HP·속도·운반량 중 하나 ↓ </td></tr>
         </table>
         <h3>숙성 효과 (10초 후)</h3>
         <table class="controls-table">
-          <tr><td><span style="display:inline-block;width:12px;height:10px;background:#ddd;vertical-align:middle;border-radius:2px"></span> 약초</td><td>HP +3 (고정)</td></tr>
-          <tr><td><span style="display:inline-block;width:12px;height:10px;background:#2ecc40;vertical-align:middle;border-radius:2px"></span> 독초</td><td>약초더미로 변환!</td></tr>
-          <tr><td>🌸✨ 특수초</td><td>HP·속도·운반량 중 하나 ↑</td></tr>
+          <tr><td><span style="display:inline-block;width:12px;height:10px;background:#2ecc40;vertical-align:middle;border-radius:2px"></span> → <span style="display:inline-block;width:12px;height:10px;background:#ddd;vertical-align:middle;border-radius:2px"></span> 약초</td><td>HP +3 (고정)</td></tr>
+          <tr><td><span style="display:inline-block;width:12px;height:10px;background:#9b59b6;vertical-align:middle;border-radius:2px"></span> → <span style="display:inline-block;width:12px;height:10px;background:#2ecc40;vertical-align:middle;border-radius:2px"></span> 독초</td><td>약초더미로 변환!</td></tr>
+          <tr><td><span style="display:inline-block;width:12px;height:10px;background:#f1c40f;vertical-align:middle;border-radius:2px"></span> → <span style="display:inline-block;width:12px;height:10px;background:#f1c40f;vertical-align:middle;border-radius:2px;border:1.5px solid #e74c3c"></span> 특수초 </td><td>HP·속도·운반량 중 하나 ↑</td></tr>
         </table>
         <h3>주의</h3>
         <ul>
@@ -84,7 +85,10 @@
         </ul>
       </div>
     </div>
-    <button class="btn btn-primary btn-lg" id="btn-rules-start">게임 시작!</button>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px">
+      <button class="btn btn-secondary" id="btn-rules-back">← 이전</button>
+      <button class="btn btn-primary btn-lg" id="btn-rules-start">게임 시작!</button>
+    </div>
   </div>
 </div>
 

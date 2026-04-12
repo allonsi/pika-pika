@@ -23,9 +23,9 @@ const T_EMPTY = 0, T_ROCK = 1, T_WATER = 2, T_BURROW = 3;
 // ── CHARACTER DEFS ────────────────────────────────────
 const CHAR_DEFS = {
   pika:  { name:'Pika',  startHp:150, maxHp:200, speed:6,  carry:2, color:'#c4945a', earColor:'#b07840', desc:'그냥 쥐토끼',          behavior:'balanced' },
-  rpika: { name:'Rpika', startHp:200, maxHp:250, speed:3,  carry:2, color:'#e8dfc8', earColor:'#d0c0a0', desc:'털이 복슬복슬한 쥐토끼', behavior:'defensive' },
-  pyka:  { name:'Pyka',  startHp:100, maxHp:200, speed:9,  carry:2, color:'#6a6a8a', earColor:'#5a5a7a', desc:'매끈매끈한 쥐토끼',    behavior:'fast' },
-  hika:  { name:'Hika',  startHp:100, maxHp:200, speed:6,  carry:3, color:'#8a6040', earColor:'#7a5030', desc:'카우보이 쥐토끼',      behavior:'thief' },
+  rpika: { name:'Rpika', startHp:200, maxHp:250, speed:4,  carry:4, color:'#e8dfc8', earColor:'#d0c0a0', desc:'털이 복슬복슬한 쥐토끼', behavior:'defensive' },
+  pyka:  { name:'Pyka',  startHp:90,  maxHp:200, speed:8,  carry:1, color:'#6a6a8a', earColor:'#5a5a7a', desc:'매끈매끈한 쥐토끼',    behavior:'fast' },
+  hika:  { name:'Hika',  startHp:100, maxHp:200, speed:5,  carry:3, color:'#8a6040', earColor:'#7a5030', desc:'카우보이 쥐토끼',      behavior:'thief' },
 };
 
 const BURROW_CORNERS = [
@@ -37,10 +37,10 @@ const BURROW_CORNERS = [
 
 // ── STORY ─────────────────────────────────────────────
 const STORY_SCENES = [
-  { emoji:'☀️🌿', text:'아 대충 등따숩고 햇볕 들고 좋다~' },
-  { emoji:'❄️🌨️', text:'갑자기 겨울이 찾아왔다!' },
-  { emoji:'😱❄️', text:'큰일났다. 겨울나기 준비를 안 했다!' },
-  { emoji:'🌿🏃', text:'빨리 풀더미를 모으자!' },
+  { img:'assets/story-1-sunny-day.png', text:'아 대충 등 따숩고 햇볕 들고 좋다~ 평생 이러고 살고 싶다' },
+  { img:'assets/story-2-winter-is-coming.png', text:'❄️ 어...? 갑자기 웬 겨울 폭풍이여...? ❄️' },
+  { img:'assets/story-3-empty-home.png', text:'아... 겨울나기 준비 안 했다....! 😱😱😱' },
+  { img:'assets/story-4-harvest-time.png', text:'🌿 빨리 풀더미를 모으자! 🏃' },
 ];
 
 // ── AUDIO ──────────────────────────────────────────────
@@ -70,6 +70,8 @@ const SFX = {
   ripen:     () => tone(1200, 'triangle', 0.3, 0.18),
   lowHp:     () => tone(160, 'square', 0.12, 0.35),
   deposit:   () => tone(330, 'sine', 0.12),
+  countdownTick: () => tone(660, 'sine', 0.15),
+  countdownGo:   () => { tone(880,'sine',0.12); setTimeout(()=>tone(1100,'sine',0.12),80); setTimeout(()=>tone(1320,'sine',0.18),160); },
   win:       () => [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,'sine',0.35),i*160)),
   lose:      () => [440,330,220,110].forEach((f,i)=>setTimeout(()=>tone(f,'sawtooth',0.4),i*180)),
 };
@@ -442,36 +444,36 @@ function doPickup(char) {
         // 최대치 → 하나 내려놓음
         const b=char.carrying.at(-1);
         b.carrier=null; b.x=char.x; b.y=char.y;
-        b.ownedBy=char; b.ownedUntil=Date.now()+2000;
+        b.ownedBy=char; b.ownedUntil=Date.now()+1000;
         char.carrying.splice(char.carrying.length-1,1);
       }
     } else {
       // 근처 풀더미 없음 → 하나 내려놓음
       const b=char.carrying.at(-1);
       b.carrier=null; b.x=char.x; b.y=char.y;
-      b.ownedBy=char; b.ownedUntil=Date.now()+2000;
+      b.ownedBy=char; b.ownedUntil=Date.now()+1000;
       char.carrying.splice(char.carrying.length-1,1);
     }
     return;
   }
-  // pull from nearby burrow
+  // pickup from ground (priority — dropped bundles should always be reachable)
+  const b=bundleInRange(char);
+  if (b && char.carrying.length<char.carryMax) {
+    b.carrier=char; char.carrying.push(b);
+    return;
+  }
+  // pull from nearby burrow (fallback when no ground bundles nearby)
   const bw=burrowInRange(char,true);
   if (bw && bw.stored.length>0 && char.carrying.length<char.carryMax) {
     const isOther = bw!==char.burrow;
     if (isOther && char.stealCd>0) return;
-    const b=bw.stored.at(-1);
+    const b2=bw.stored.at(-1);
     bw.stored.splice(bw.stored.length-1,1);
     bw.topBundle=bw.stored.at(-1)||null;
     bw.count--;
-    b.stored=false; b.storedIn=null; b.carrier=char;
-    char.carrying.push(b);
-    if (isOther) char.stealCd=2000;
-    return;
-  }
-  // pickup from ground
-  const b=bundleInRange(char);
-  if (b && char.carrying.length<char.carryMax) {
-    b.carrier=char; char.carrying.push(b);
+    b2.stored=false; b2.storedIn=null; b2.carrier=char;
+    char.carrying.push(b2);
+    if (isOther) char.stealCd=1000;
   }
 }
 
@@ -487,7 +489,7 @@ function doConsume(char) {
     bw.count--;
     b.stored=false; b.storedIn=null;
     consumeBundle(b,char);
-    if (isOther) char.consumeCd=3000;
+    if (isOther) char.consumeCd=1000;
     return;
   }
   // from carrying
@@ -541,6 +543,19 @@ function nearestHerbGrass(char) {
     if (d<bd) { bd=d; best=g; }
   }
   return best;
+}
+
+// Find nearest grass that is actually reachable via BFS
+function nearestReachableGrass(char) {
+  if (!S.grasses.length) return null;
+  const sorted=[...S.grasses].sort((a,b)=>
+    pdist(char.midX,char.midY,c2px(a.cx)+CELL/2,c2px(a.cy)+CELL/2) -
+    pdist(char.midX,char.midY,c2px(b.cx)+CELL/2,c2px(b.cy)+CELL/2)
+  );
+  for (const g of sorted.slice(0,8)) {
+    if (bfsPath(char.cx,char.cy,g.cx,g.cy)!==null) return g;
+  }
+  return sorted[0]; // fallback: nearest even if unreachable
 }
 
 function updateAI(char, dt) {
@@ -626,9 +641,13 @@ function updateAI(char, dt) {
       if (beh==='defensive' && char.carrying.length>0) {
         char.aiState='DEPOSIT'; break;
       }
-      const g=nearestGrass(char);
+      // Pick a reachable target only when we don't have one (or it's gone)
+      if (!char.aiTarget || !S.grasses.includes(char.aiTarget)) {
+        char.aiTarget = nearestReachableGrass(char);
+        char.aiPath = null; // reset path for new target
+      }
+      const g=char.aiTarget;
       if (!g) { char.aiState='IDLE'; break; }
-      char.aiTarget=g;
       aiMoveToward(char,c2px(g.cx),c2px(g.cy),dt);
       if (pdist(char.midX,char.midY,c2px(g.cx)+CELL/2,c2px(g.cy)+CELL/2)<=INTERACT_PX) {
         char.facing=char.midX<c2px(g.cx)+CELL/2?'right':'left';
@@ -661,7 +680,7 @@ function updateAI(char, dt) {
           bw.count--;
           b.stored=false; b.storedIn=null; b.carrier=char;
           char.carrying.push(b);
-          char.stealCd=2000;
+          char.stealCd=1000;
         }
         if (char.carrying.length>=char.carryMax||bw.count===0) char.aiState='DEPOSIT';
       }
@@ -1185,12 +1204,22 @@ function endGame(result) {
 }
 
 // ── STORY ─────────────────────────────────────────────
-function showStoryScreen() {
-  state.storyIdx=0; showScreen('story'); renderStory();
+function showStoryScreen(idx=0) {
+  state.storyIdx=idx; showScreen('story'); renderStory();
+}
+function retreatStory() {
+  if (state.storyIdx>0) { state.storyIdx--; renderStory(); }
+  else { showScreen('charselect'); buildCharSelect(); }
 }
 function renderStory() {
   const s=STORY_SCENES[state.storyIdx];
-  document.getElementById('story-scene').textContent=s.emoji;
+  const scene=document.getElementById('story-scene');
+  if (s.img) {
+    scene.innerHTML=`<img src="${s.img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+  } else {
+    scene.innerHTML='';
+    scene.textContent=s.emoji;
+  }
   document.getElementById('story-text').textContent=s.text;
   document.getElementById('story-progress').textContent=`${state.storyIdx+1} / ${STORY_SCENES.length}`;
 }
@@ -1206,10 +1235,18 @@ function startCountdown() {
   let n=5;
   const el=document.getElementById('countdown-number');
   el.textContent=n;
+  SFX.countdownTick();
   const tick=()=>{
     n--;
-    if (n<=0) { el.textContent='GO!'; setTimeout(()=>showScreen('game'),600); }
-    else { el.textContent=n; setTimeout(tick,1000); }
+    if (n<=0) {
+      el.textContent='GO!';
+      SFX.countdownGo();
+      setTimeout(()=>showScreen('game'),600);
+    } else {
+      el.textContent=n;
+      SFX.countdownTick();
+      setTimeout(tick,1000);
+    }
   };
   setTimeout(tick,1000);
 }
@@ -1322,8 +1359,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Button wiring
   document.getElementById('btn-title-start').onclick=()=>{ showScreen('charselect'); buildCharSelect(); };
   document.getElementById('btn-charselect-back').onclick=()=>showScreen('title');
+  document.getElementById('btn-story-back').onclick=()=>retreatStory();
   document.getElementById('btn-story-skip').onclick=()=>{ state.storyIdx=STORY_SCENES.length-1; advanceStory(); };
   document.getElementById('btn-story-next').onclick=()=>advanceStory();
+  document.getElementById('btn-rules-back').onclick=()=>showStoryScreen(STORY_SCENES.length-1);
   document.getElementById('btn-rules-start').onclick=()=>startCountdown();
 
   document.getElementById('btn-win-replay').onclick=()=>{ initGame(); startCountdown(); };
