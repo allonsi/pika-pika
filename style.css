@@ -440,6 +440,31 @@ kbd {
   color: var(--accent2);
 }
 
+/* ─── TUTORIAL ────────────────────────────────────── */
+.tutorial-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.tutorial-stage-btn {
+  width: 100%;
+  text-align: left;
+  padding: 16px 20px;
+  border-radius: var(--rad);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.tutorial-stage-btn small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.75;
+  margin-top: 6px;
+}
+
 /* ─── END SCREENS ─────────────────────────────────── */
 #screen-win, #screen-lose, #screen-gameover {
   background: rgba(0,0,0,0.92);

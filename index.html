@@ -17,9 +17,20 @@
   <div class="title-center">
     <div class="title-logo">🐰</div>
     <h1>쥐토끼의 겨울나기</h1>
-    <p class="title-sub">풀더미 30개를 가장 먼저 굴에 쌓아라!</p>
+    <p class="title-sub">풀더미를 가장 먼저 굴에 쌓아라!</p>
     <button class="btn btn-primary btn-lg" id="btn-title-start">게임 시작</button>
+    <button class="btn btn-secondary" id="btn-title-tutorial">🎓 튜토리얼</button>
     <p class="title-save" id="title-save-info"></p>
+  </div>
+</div>
+
+<!-- TUTORIAL -->
+<div id="screen-tutorial" class="screen">
+  <div class="screen-inner">
+    <h2>🎓 튜토리얼</h2>
+    <p class="screen-hint">스테이지를 선택하세요. 각 스테이지는 풀 종류와 상대 수가 달라요.</p>
+    <div id="tutorial-list" class="tutorial-list"></div>
+    <button class="btn btn-secondary" id="btn-tutorial-back">← 뒤로</button>
   </div>
 </div>
 
@@ -53,10 +64,11 @@
 <div id="screen-rules" class="screen">
   <div class="screen-inner screen-inner--rules">
     <h2>게임 규칙 & 조작법</h2>
+    <p id="rules-tutorial-hint" style="display:none;background:#0f3460;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:14px;color:#08d9d6"></p>
     <div class="rules-grid">
       <div class="rules-col">
         <h3>목표</h3>
-        <p>맵에서 풀을 수확해 풀더미로 만들고, 자신의 굴에 <strong>30개</strong> 쌓으면 승리!</p>
+        <p>맵에서 풀을 수확해 풀더미로 만들고, 자신의 굴에 <strong id="rules-win-count">30</strong>개 쌓으면 승리!</p>
         <h3>조작</h3>
         <table class="controls-table">
           <tr><td>↑↓←→</td><td>이동</td></tr>
@@ -136,6 +148,7 @@
     <h1>승리!</h1>
     <p id="win-desc"></p>
     <div class="end-btns">
+      <button class="btn btn-primary" id="btn-win-next-stage" style="display:none">다음 스테이지 →</button>
       <button class="btn btn-primary" id="btn-win-replay">다시 하기</button>
       <button class="btn btn-secondary" id="btn-win-reselect">캐릭터 재선택</button>
       <button class="btn btn-secondary" id="btn-win-title">타이틀로</button>

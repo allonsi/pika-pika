@@ -43,6 +43,16 @@ const STORY_SCENES = [
   { img:'assets/story-4-harvest-time.png', text:'🌿 빨리 풀더미를 모으자! 🏃' },
 ];
 
+// ── TUTORIAL STAGES ───────────────────────────────────
+const TUTORIAL_STAGES = [
+  { stage:1, label:'스테이지 1 — 약초의 세계', aiCount:1, poison:false, special:false, winCount:10,
+    hint:'🌿 약초만 있어요! 풀더미 10개를 굴에 쌓으면 클리어. 상대 1마리.' },
+  { stage:2, label:'스테이지 2 — 독초 주의!',  aiCount:2, poison:true,  special:false, winCount:15,
+    hint:'🍄 독초가 등장했어요! 숙성하면 약초로 변해요. 15개 클리어. 상대 2마리.' },
+  { stage:3, label:'스테이지 3 — 풀 총집합',   aiCount:2, poison:true,  special:true,  winCount:20,
+    hint:'🌸 특수초도 등장! 숙성하면 랜덤 버프. 20개 클리어. 상대 2마리.' },
+];
+
 // ── AUDIO ──────────────────────────────────────────────
 let _ctx = null;
 function ac() {
@@ -227,7 +237,7 @@ function depositBundle(b, brow) {
   brow.topBundle=b;
   brow.count++;
   SFX.deposit();
-  if (brow.count>=WIN_COUNT) {
+  if (brow.count>=S.winCount) {
     if (brow.owner?.isPlayer) endGame('win');
     else endGame('lose');
   }
@@ -768,31 +778,37 @@ function aiMoveToward(char, tx, ty, dt) {
 // ── GAME INIT ─────────────────────────────────────────
 function initGame() {
   _gid=0; _bid=0;
+  const tconf = state.tutorialStage != null ? TUTORIAL_STAGES[state.tutorialStage-1] : null;
   S = {
     map:null, grasses:[], bundles:[], characters:[], player:null,
     burrows:[], grassPaused:false, grassTimer:0, hpTimer:0, lowHpTimer:0,
     keys:{}, justPressed:{}, gameOver:false,
+    winCount: tconf ? tconf.winCount : WIN_COUNT,
+    tutorialConf: tconf,
   };
   S.map=makeMap();
 
-  // Randomise corners
+  // Randomise corners — use only as many burrows as needed
   const corners=shuffle([...BURROW_CORNERS]);
-  S.burrows=corners.map(c=>makeBurrow(c.cx,c.cy));
+  const aiCount = tconf ? tconf.aiCount : 3;
+  S.burrows=corners.slice(0, aiCount+1).map(c=>makeBurrow(c.cx,c.cy));
   markBurrows(S.map, S.burrows);
 
-  // All 4 char types, shuffle assignment
+  // Char assignment
   const sel=state.selectedChar;
   const rest=['pika','rpika','pyka','hika'].filter(t=>t!==sel);
   shuffle(rest);
 
   const player=new Char(sel,true,S.burrows[0]);
   S.characters.push(player); S.player=player;
-  rest.forEach((t,i)=>{
-    S.characters.push(new Char(t,false,S.burrows[i+1]));
-  });
+  for (let i=0; i<aiCount; i++) {
+    S.characters.push(new Char(rest[i],false,S.burrows[i+1]));
+  }
 
   // Initial grass
-  spawnGrass('herb',5); spawnGrass('poison',4); spawnGrass('special',1);
+  spawnGrass('herb',5);
+  if (!tconf || tconf.poison)   spawnGrass('poison',4);
+  if (!tconf || tconf.special)  spawnGrass('special',1);
 }
 
 // ── UPDATE ────────────────────────────────────────────
@@ -843,8 +859,8 @@ function updateGame(dt) {
     const tot=S.grasses.length;
     if (!S.grassPaused) {
       spawnGrass('herb',poisson(3));
-      spawnGrass('poison',poisson(3));
-      spawnGrass('special',poisson(0.5));
+      if (!S.tutorialConf || S.tutorialConf.poison)   spawnGrass('poison',  poisson(3));
+      if (!S.tutorialConf || S.tutorialConf.special)  spawnGrass('special', poisson(0.5));
       if (S.grasses.length>=50) S.grassPaused=true;
     } else if (tot<45) {
       S.grassPaused=false;
@@ -927,7 +943,7 @@ function drawBurrows() {
     ctx.strokeRect(px,py,sz,sz);
     ctx.lineWidth=1;
     // Count label
-    const lbl=`${bw.count}/${WIN_COUNT}`;
+    const lbl=`${bw.count}/${S.winCount}`;
     ctx.fillStyle='rgba(0,0,0,0.65)';
     ctx.fillRect(px+1,py+sz-13,sz-2,12);
     ctx.fillStyle='#fff';
@@ -1134,10 +1150,10 @@ function updateHUD() {
   const burrowHtml=S.burrows.map(bw=>{
     const isMe=bw.owner===p;
     const topClr=bw.topBundle?bundleColor(bw.topBundle):'#444';
-    const barW=Math.min(100,bw.count/WIN_COUNT*100);
+    const barW=Math.min(100,bw.count/S.winCount*100);
     return `<div class="hud-burrow-row${isMe?' my-burrow':''}">
       <span>${bw.owner?.name||'?'} ${isMe?'(나)':''}</span>
-      <span style="color:${topClr}">${bw.topBundle?'■':''} ${bw.count}/${WIN_COUNT}</span>
+      <span style="color:${topClr}">${bw.topBundle?'■':''} ${bw.count}/${S.winCount}</span>
     </div>
     <div class="hud-bar" style="margin-bottom:4px">
       <div class="hud-bar-fill" style="width:${barW}%;background:${isMe?'#e94560':'#444'}"></div>
@@ -1169,13 +1185,26 @@ function stopLoop() {
 }
 
 // ── SCREEN MANAGEMENT ────────────────────────────────
-const state = { screen:'title', selectedChar:null, storyIdx:0, charSelectIdx:0 };
+const state = { screen:'title', selectedChar:null, storyIdx:0, charSelectIdx:0, tutorialStage:null };
 
 function showScreen(name) {
   state.screen=name;
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   const el=document.getElementById('screen-'+name);
   if (el) el.classList.add('active');
+  if (name==='rules') {
+    const tconf = state.tutorialStage != null ? TUTORIAL_STAGES[state.tutorialStage-1] : null;
+    const hint = document.getElementById('rules-tutorial-hint');
+    const wc = document.getElementById('rules-win-count');
+    if (tconf) {
+      hint.textContent = tconf.hint;
+      hint.style.display = '';
+      wc.textContent = tconf.winCount;
+    } else {
+      hint.style.display = 'none';
+      wc.textContent = WIN_COUNT;
+    }
+  }
   const gw=document.getElementById('game-wrapper');
   if (name==='game') {
     gw.style.display='flex';
@@ -1192,12 +1221,16 @@ function endGame(result) {
   patchSave({lastChar:state.selectedChar});
   if (result==='win') {
     SFX.win();
-    document.getElementById('win-desc').textContent=
-      `${CHAR_DEFS[state.selectedChar].name}으로 굴에 풀더미 ${WIN_COUNT}개를 쌓았습니다!`;
+    const isTutorial = state.tutorialStage != null;
+    const hasNext = isTutorial && state.tutorialStage < TUTORIAL_STAGES.length;
+    document.getElementById('win-desc').textContent = isTutorial
+      ? `스테이지 ${state.tutorialStage} 클리어! 풀더미 ${S.winCount}개를 쌓았습니다!`
+      : `${CHAR_DEFS[state.selectedChar].name}으로 굴에 풀더미 ${S.winCount}개를 쌓았습니다!`;
+    document.getElementById('btn-win-next-stage').style.display = hasNext ? 'inline-block' : 'none';
     showScreen('win');
   } else {
     SFX.lose();
-    const reason=S.player.hp<=0?'HP가 0이 됐습니다.':'다른 쥐토끼가 먼저 30개를 쌓았습니다.';
+    const reason=S.player.hp<=0?'HP가 0이 됐습니다.':'다른 쥐토끼가 먼저 목표를 달성했습니다.';
     document.getElementById('lose-desc').textContent=reason;
     showScreen('lose');
   }
@@ -1284,7 +1317,8 @@ function buildCharSelect() {
 function pickChar(type) {
   state.selectedChar=type;
   initGame();
-  showStoryScreen();
+  if (state.tutorialStage != null) showScreen('rules');
+  else showStoryScreen();
 }
 
 // ── INPUT ─────────────────────────────────────────────
@@ -1340,6 +1374,24 @@ function buildTitleBg() {
   }
 }
 
+// ── TUTORIAL ──────────────────────────────────────────
+function showTutorialSelect() {
+  buildTutorialSelect();
+  showScreen('tutorial');
+}
+
+function buildTutorialSelect() {
+  const list = document.getElementById('tutorial-list');
+  list.innerHTML = '';
+  TUTORIAL_STAGES.forEach(ts => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary tutorial-stage-btn';
+    btn.innerHTML = `<strong>${ts.label}</strong><small>${ts.hint}</small>`;
+    btn.onclick = () => { state.tutorialStage = ts.stage; showScreen('charselect'); buildCharSelect(); };
+    list.appendChild(btn);
+  });
+}
+
 // ── BOOT ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', ()=>{
   // Add reverse runner animation
@@ -1357,22 +1409,34 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   // Button wiring
-  document.getElementById('btn-title-start').onclick=()=>{ showScreen('charselect'); buildCharSelect(); };
-  document.getElementById('btn-charselect-back').onclick=()=>showScreen('title');
+  document.getElementById('btn-title-start').onclick=()=>{ state.tutorialStage=null; showScreen('charselect'); buildCharSelect(); };
+  document.getElementById('btn-title-tutorial').onclick=()=>showTutorialSelect();
+  document.getElementById('btn-tutorial-back').onclick=()=>{ state.tutorialStage=null; showScreen('title'); };
+  document.getElementById('btn-charselect-back').onclick=()=>{
+    if (state.tutorialStage != null) showTutorialSelect();
+    else showScreen('title');
+  };
   document.getElementById('btn-story-back').onclick=()=>retreatStory();
   document.getElementById('btn-story-skip').onclick=()=>{ state.storyIdx=STORY_SCENES.length-1; advanceStory(); };
   document.getElementById('btn-story-next').onclick=()=>advanceStory();
-  document.getElementById('btn-rules-back').onclick=()=>showStoryScreen(STORY_SCENES.length-1);
+  document.getElementById('btn-rules-back').onclick=()=>{
+    if (state.tutorialStage != null) showTutorialSelect();
+    else showStoryScreen(STORY_SCENES.length-1);
+  };
   document.getElementById('btn-rules-start').onclick=()=>startCountdown();
 
   document.getElementById('btn-win-replay').onclick=()=>{ initGame(); startCountdown(); };
+  document.getElementById('btn-win-next-stage').onclick=()=>{
+    state.tutorialStage++;
+    showScreen('charselect'); buildCharSelect();
+  };
   document.getElementById('btn-win-reselect').onclick=()=>{ showScreen('charselect'); buildCharSelect(); };
-  document.getElementById('btn-win-title').onclick=()=>showScreen('title');
+  document.getElementById('btn-win-title').onclick=()=>{ state.tutorialStage=null; showScreen('title'); };
 
   document.getElementById('btn-lose-continue').onclick=()=>showScreen('gameover');
   document.getElementById('btn-gameover-replay').onclick=()=>{ initGame(); startCountdown(); };
   document.getElementById('btn-gameover-reselect').onclick=()=>{ showScreen('charselect'); buildCharSelect(); };
-  document.getElementById('btn-gameover-title').onclick=()=>showScreen('title');
+  document.getElementById('btn-gameover-title').onclick=()=>{ state.tutorialStage=null; showScreen('title'); };
 
   showScreen('title');
 });
